@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "error": "Target page, context or browser has been closed",
+  "persona": {
+    "description": "Persona: Olivia\n\nBackground:\nOlivia is a young and ambitious marketing professional who has quickly risen through the ranks at a leading advertising agency. With a sharp business acumen and a creative flair, she is responsible for developing innovative campaigns that drive results for the agency's high-profile clients.\n\nDemographics:\nAge: 24\nGender: Female\nEducation: Bachelor's Degree in Marketing\nProfession: Marketing Manager\nIncome: $100,000\n\nFinancial Situation:\nOlivia's impressive income allows her to maintain a comfortable lifestyle in the city. She is financially savvy, carefully managing her expenses while also enjoying the occasional luxury purchase or travel opportunity.\n\nShopping Habits:\nOlivia enjoys fashion and keeping up with the latest trends. She shops at a mix of high-end retailers and trendy boutiques, seeking out pieces that reflect her personal style and professional image. Olivia is always on the lookout for unique and stylish items that will help her stand out.\n\nProfessional Life:\nOlivia thrives in the fast-paced environment of the advertising industry. She is highly ambitious and driven, constantly seeking out new challenges and opportunities to showcase her skills. Her ability to think outside the box and deliver impactful campaigns has earned her the respect of her colleagues and clients.\n\nPersonal Style:\nOlivia has a sophisticated and polished personal style, often opting for tailored blazers, sleek dresses, and statement accessories. She enjoys experimenting with the latest fashion trends but maintains a classic and elegant look that complements her professional image.",
+    "goal": "buy a pair of compression socks with zipper for women.",
+    "target_url": "https://www.amazon.com"
+  },
+  "url": "https://www.amazon.com"
+}

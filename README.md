@@ -1,4 +1,4 @@
-<h1 align="center"> [CHI'25 LBW Accepted] UXAgent: An LLM Agent-Based Usability Testing Framework for Web Design </h1>
+<h1 align="center"> Synthetic User for A/B testing </h1>
 
 <p align="center">
     <a href="https://arxiv.org/abs/2502.12561">
@@ -9,9 +9,7 @@
     </a>
 </p>
 
-<p align="center">
-Yuxuan Lu, Bingsheng Yao, Hansu Gu, Jing Huang, Jessie Wang, Laurence Li, Haiyang Zhang, Qi He, Toby Jia-Jun Li, Dakuo Wang
-</p>
+
 
 <p align="center">
     <img src="/figures/teaser.png" width="100%">
@@ -19,12 +17,13 @@ Yuxuan Lu, Bingsheng Yao, Hansu Gu, Jing Huang, Jessie Wang, Laurence Li, Haiyan
 
 
 ## Overview
-**UXAgent** is a framework that uses Large Language Models (LLMs) as agents to conduct usability testing in web environments. These agents simulate human-like behaviors, allowing UX researchers to:
-- Perform early usability evaluations.
-- Gather actionable design insights.
-- Iterate without immediate reliance on human participants.
+**Synthetic User** is a framework for creating AI-powered synthetic users that can simulate realistic human behaviors on websites. This repository provides tools to:
+- Generate diverse user personas with customizable demographics and intents
+- Create automated agents that navigate websites like real users would
+- Conduct A/B testing and usability evaluations with synthetic participants
+- Gather behavioral data and insights without requiring human test subjects
 
-The system leverages dual-system reasoning for quick decisions and in-depth analysis, and its **Universal Web Connector** ensures compatibility with any web page. By offering real-time feedback, UXAgent streamlines the design process and improves testing efficiency.
+The system supports multiple execution modes (AgentQL, Computer Use) and integrates with Browserbase for scalable web automation. Whether you're testing new features, optimizing user flows, or conducting market research, synthetic users provide a cost-effective way to gather user behavior data at scale.
 
 [![Button Click]][Link] 
 
@@ -46,7 +45,8 @@ https://github.com/user-attachments/assets/0c5d22a8-4438-402b-8e6c-2151bdf53bf1
 
 1. **Clone the repository:**
    ```bash
-   git clone git@github.com:xxx/xxx.git
+   git clone https://github.com/YOUR_USERNAME/UXAgent.git
+   cd UXAgent
    ```
 
 2. **Set up the environment:**
@@ -57,35 +57,27 @@ https://github.com/user-attachments/assets/0c5d22a8-4438-402b-8e6c-2151bdf53bf1
 
 3. **Install the package:**
    ```bash
-   cd simulated_web_agent
    pip install -e .
    ```
 
-4. **Install Chrome & Chromedriver:**
-   - Download Chrome and the corresponding [chromedriver](https://googlechromelabs.github.io/chrome-for-testing/#stable).
-   - Configure the chromedriver (example commands for Linux and macOS below).
-
-   **Linux:**
-   ```bash
-   wget https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.85/linux64/chromedriver-linux64.zip
-   unzip chromedriver-linux64.zip
-   sudo mv chromedriver /usr/bin/chromedriver
-   sudo chmod +x /usr/bin/chromedriver
-   ```
-
-   **macOS:**
-   ```bash
-   brew install chromedriver
-   xattr -d com.apple.quarantine /opt/homebrew/bin/chromedriver
-   ```
-
-   **Verify Installation:**
-   ```bash
-   chromedriver --version
-   ```
+4. **Browserbase credentials (required):**
+   The synthetic user framework runs on Browserbase (remote Chromium over CDP). Provide one of the following:
+   - Set an explicit WebSocket endpoint:
+     ```bash
+     export BROWSERBASE_WS_ENDPOINT="wss://connect.browserbase.com?sessionId=..."
+     ```
+   - Or let the tool create a session via API (preferred):
+     ```bash
+     export BROWSERBASE_API_KEY=bb_XXXX
+     # optional, but recommended to scope usage
+     export BROWSERBASE_PROJECT_ID=3034c893-8a55-4327-beb7-aa4829f70341
+     # optional: override API base or region
+     export BROWSERBASE_API_BASE=https://api.browserbase.com
+     export BROWSERBASE_REGION=us
+     ```
 
 5. **Set API keys:**
-   Our UXAgent system supports AWS Claude and OpenAI. You only need to set one of them.
+   The system supports AWS Claude and OpenAI. You only need to set one of them.
    - For AWS Claude:
       - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html
    ```bash
@@ -94,21 +86,27 @@ https://github.com/user-attachments/assets/0c5d22a8-4438-402b-8e6c-2151bdf53bf1
    export OPENAI_API_KEY=sk-123
    ```
 
-6. **Optional: Enable "headful" mode:**
-   By default, Chrome runs in headless mode (no GUI). To view the browser, set the following:
+6. **Optional: Headful mode:**
+   Browserbase sessions can be headless or headful depending on your session configuration. You can still set:
    ```bash
    export HEADLESS=false
    ```
+   Note: local browser launch is no longer supported.
 
 ---
 
-## Quick Start
+## Quick Start (Browserbase + AgentQL)
 
 1. **Run the Agent:**
-   We provide 1,000 generated persona in `example_data`. Use the following command to test with a persona and save the output:
+   Provide a target URL and a persona. The agent will connect to Browserbase automatically using the environment variables above.
    ```bash
-   python3 -m simulated_web_agent.main --persona "example_data/personas/json/virtual customer 0.json" --output "output"  --llm-provider openai
+   python3 -m simulated_web_agent.main \
+     --persona "example_data/personas/json/virtual customer 0.json" \
+     --output "output" \
+     --llm-provider openai \
+     --target-url "https://www.amazon.com"
    ```
+   Results are saved under the specified `--output` directory.
 
 2. **Example Persona Format:**
    ```json
@@ -152,6 +150,27 @@ https://github.com/user-attachments/assets/0c5d22a8-4438-402b-8e6c-2151bdf53bf1
    ```
 ---
 
+## Executors and Modes
+
+| Mode | Executor file | Parsing style | Output | Example CLI |
+| --- | --- | --- | --- | --- |
+| agentql | `src/simulated_web_agent/executor/dom_agentql_env.py` | DOM/text (AgentQL) | `agentql_results.json` | ```bash
+python3 -m simulated_web_agent.main --mode agentql --persona example_data/personas/json/virtual\ customer\ 0.json --output output/agentql --llm-provider openai --target-url https://example.com
+``` |
+| computer-use | `src/simulated_web_agent/executor/dom_llm_actions_env.py` | DOM/text (LLM JSON actions) | `computer_use_results.json` | ```bash
+python3 -m simulated_web_agent.main --mode computer-use --persona example_data/personas/json/virtual\ customer\ 0.json --output output/cu --llm-provider openai --target-url https://example.com
+``` |
+| openai-computer-use | `src/simulated_web_agent/executor/openai_computer_use.py` | Vision/screenshot (OpenAI native) | `openai_computer_use_results.json` | ```bash
+OPENAI_API_KEY=... python3 -m simulated_web_agent.main --mode openai-computer-use --persona example_data/personas/json/virtual\ customer\ 0.json --output output/openai_cu --llm-provider openai --target-url https://example.com
+``` |
+| anthropic-computer-use | `src/simulated_web_agent/executor/anthropic_computer_use.py` | Vision/screenshot (Claude; Browserbase bridge executes tool actions) | `anthropic_computer_use_results.json` | ```bash
+ANTHROPIC_API_KEY=... python3 -m simulated_web_agent.main --mode anthropic-computer-use --persona example_data/personas/json/virtual\ customer\ 0.json --output output/anthropic_cu --llm-provider aws --target-url https://example.com
+``` |
+
+**Important:** The OpenAI Computer Use executor requires allowlisted access granted by OpenAI. If your account is not allowlisted for the `computer-use-preview` model, this mode will fail with a 404 `model_not_found` error.
+
+---
+
 ## Generating Personas
 
 Use the `persona.py` script to generate virtual customer personas based on configurations.
@@ -182,6 +201,12 @@ Use the `persona.py` script to generate virtual customer personas based on confi
    ```
 
 Generated personas will be saved in the specified `output_dir` as `.json` and `.txt` files.
+
+---
+
+## Notes on Legacy Modes
+- Local Selenium/Chromedriver-based execution and manual recipe flows have been removed from the CLI. The runtime now uses Playwright over CDP to connect to Browserbase exclusively.
+- Internal recipe modules remain in the repository history but are not used by the current entrypoint.
 
 ---
 

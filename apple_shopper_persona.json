@@ -1,0 +1,7 @@
+{
+    "persona": "Persona: Alex\n\nBackground:\nAlex is a 28-year-old software developer in San Francisco who loves Apple products and is looking for new AirPods for daily commuting and work calls. Alex appreciates high-quality audio and seamless integration with Apple devices.\n\nDemographics:\nAge: 28\nGender: Non-binary\nEducation: Computer Science degree\nProfession: Software Developer\nIncome: $120,000\nLocation: San Francisco, California\n\nTech Preferences:\nAlex is an Apple ecosystem user with iPhone, MacBook, and Apple Watch. They value products that integrate well together and offer convenience for their busy lifestyle. They often take calls and listen to music while commuting.\n\nShopping Habits:\nAlex prefers to buy directly from Apple Store online for authenticity and warranty coverage. They research features but tend to make decisions quickly when they find what they need. Price is less important than quality and features.\n\nProfessional Life:\nAs a software developer, Alex spends long hours coding and in video calls. They need reliable audio equipment for meetings and prefer wireless solutions that don't interfere with their workflow.\n\nLifestyle:\nAlex commutes daily on public transport and works from both office and home. They need versatile audio solutions that work well in different environments. They value products that enhance productivity and entertainment.",
+    "intent": "find AirPods and add them to cart",
+    "age": 28,
+    "gender": "male",
+    "income": [100000, 140000]
+} 

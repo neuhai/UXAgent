@@ -142,3 +142,4 @@ old_data
 *.zip
 
 *.mp4
+simulated_web_agent_env/
