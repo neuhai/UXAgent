@@ -92,7 +92,7 @@ survey:
 # LLM CONFIGURATION
 # ============================================================================
 # Large Language Model provider settings
-llm_provider: "aws"     # Provider: "openai" or "aws" or "anthropic"
+llm_provider: "openai"     # Provider: "openai" or "aws" or "anthropic"
 
 # ============================================================================
 # GENERAL SETTINGS

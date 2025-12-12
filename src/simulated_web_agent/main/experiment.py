@@ -15,9 +15,103 @@ from omegaconf import DictConfig
 from ..agent import context, gpt
 from ..executor.env import WebAgentEnv  # Playwright env
 from .model import AgentPolicy  # noqa
+from .cost_calculator import format_cost
 
 log = logging.getLogger("simulated_web_agent.main.experiment")
 logging.basicConfig(level=logging.INFO)
+
+
+def _generate_token_report(trace_dir: pathlib.Path) -> dict:
+    """
+    Generate a token and cost report from api_trace files.
+
+    Args:
+        trace_dir: Directory containing api_trace files
+
+    Returns:
+        Dictionary with token and cost statistics
+    """
+    api_trace_dir = trace_dir / "api_trace"
+    if not api_trace_dir.exists():
+        return {}
+
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_tokens = 0
+    total_cost = 0.0
+    api_calls_count = 0
+    method_counts = {}
+
+    # Read all api_trace files
+    for api_trace_file in sorted(api_trace_dir.glob("api_trace_*.json")):
+        try:
+            with open(api_trace_file, "r") as f:
+                data = json.load(f)
+                api_calls_count += 1
+
+                # Count by method
+                method = data.get("method_name", "unknown")
+                method_counts[method] = method_counts.get(method, 0) + 1
+
+                # Sum tokens
+                usage = data.get("usage")
+                if usage:
+                    prompt_tokens = usage.get("prompt_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens", 0)
+                    total_prompt_tokens += prompt_tokens
+                    total_completion_tokens += completion_tokens
+                    total_tokens += usage.get("total_tokens", 0)
+
+                # Sum costs
+                cost = data.get("cost", 0.0)
+                if cost:
+                    total_cost += cost
+        except Exception as e:
+            log.warning(f"Error reading {api_trace_file}: {e}")
+
+    report = {
+        "api_calls": api_calls_count,
+        "total_prompt_tokens": total_prompt_tokens,
+        "total_completion_tokens": total_completion_tokens,
+        "total_tokens": total_tokens,
+        "total_cost": total_cost,
+        "total_cost_formatted": format_cost(total_cost),
+        "method_calls": method_counts,
+    }
+
+    return report
+
+
+def _save_token_report(trace_dir: pathlib.Path, report: dict) -> None:
+    """
+    Save token report to a JSON file and print summary.
+
+    Args:
+        trace_dir: Directory to save the report
+        report: Token report dictionary
+    """
+    if not report:
+        return
+
+    # Save as JSON
+    report_file = trace_dir / "token_report.json"
+    with open(report_file, "w") as f:
+        json.dump(report, f, indent=2)
+
+    # Print summary
+    log.info("=" * 60)
+    log.info("TOKEN AND COST REPORT")
+    log.info("=" * 60)
+    log.info(f"Total API Calls: {report['api_calls']}")
+    log.info(f"Total Tokens Used: {report['total_tokens']:,}")
+    log.info(f"  - Prompt Tokens: {report['total_prompt_tokens']:,}")
+    log.info(f"  - Completion Tokens: {report['total_completion_tokens']:,}")
+    log.info(f"Total Cost: {report['total_cost_formatted']}")
+    log.info("")
+    log.info("API Calls by Method:")
+    for method, count in sorted(report['method_calls'].items()):
+        log.info(f"  - {method}: {count} calls")
+    log.info("=" * 60)
 
 
 async def _run_for_persona_and_intent(
@@ -165,6 +259,16 @@ async def _run_for_persona_and_intent(
                 json.dump(policy.agent.memory.memories, f)
             print(f"Taking action {action}")
             print(f"Action: {steps_taken + 1} out of {max_steps}")
+
+            # Update and display real-time token statistics
+            token_report = _generate_token_report(trace_dir)
+            if token_report:
+                print(f"[Token Stats] Total Calls: {token_report['api_calls']}, "
+                      f"Tokens: {token_report['total_tokens']:,}, "
+                      f"Cost: {token_report['total_cost_formatted']}")
+                # Save report immediately so it's available even if interrupted
+                _save_token_report(trace_dir, token_report)
+
             obs = await env.step(action)
             steps_taken += 1
 
@@ -184,11 +288,41 @@ async def _run_for_persona_and_intent(
 
         log.info(f"Saved memory trace to {trace_file}")
 
+        # ---- generate and save final token/cost report ----
+        token_report = _generate_token_report(trace_dir)
+        _save_token_report(trace_dir, token_report)
+        print("\n" + "=" * 60)
+        print("FINAL TOKEN AND COST REPORT")
+        print("=" * 60)
+        if token_report:
+            print(f"Total API Calls: {token_report['api_calls']}")
+            print(f"Total Tokens: {token_report['total_tokens']:,}")
+            print(f"  - Prompt Tokens: {token_report['total_prompt_tokens']:,}")
+            print(f"  - Completion Tokens: {token_report['total_completion_tokens']:,}")
+            print(f"Total Cost: {token_report['total_cost_formatted']}")
+        print("=" * 60 + "\n")
+
     except Exception:
         err = traceback.format_exc()
         print(err)
         try:
             (policy.run_path / "error.txt").write_text(err)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        # Still generate report even if there was an error
+        try:
+            token_report = _generate_token_report(trace_dir)
+            if token_report:
+                print("\n" + "=" * 60)
+                print("PARTIAL TOKEN AND COST REPORT (before error)")
+                print("=" * 60)
+                print(f"Total API Calls: {token_report['api_calls']}")
+                print(f"Total Tokens: {token_report['total_tokens']:,}")
+                print(f"  - Prompt Tokens: {token_report['total_prompt_tokens']:,}")
+                print(f"  - Completion Tokens: {token_report['total_completion_tokens']:,}")
+                print(f"Total Cost: {token_report['total_cost_formatted']}")
+                print("=" * 60 + "\n")
+                _save_token_report(trace_dir, token_report)
         except Exception:
             pass
     finally:

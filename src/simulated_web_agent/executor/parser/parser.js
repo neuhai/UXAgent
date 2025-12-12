@@ -13,10 +13,8 @@ const parse = () => {
 
   const ALLOWED_ATTR = new Set([
     'id', 'type', 'name', 'value', 'placeholder',
-    'checked', 'disabled', 'readonly', 'required', 'maxlength',
-    'min', 'max', 'step', 'role', 'tabindex', 'alt', 'title',
-    'for', 'action', 'method', 'contenteditable', 'selected',
-    'multiple', 'autocomplete'
+    'checked', 'disabled', 'readonly', 'alt', 'title',
+    'for', 'contenteditable', 'selected', 'multiple'
   ]);
 
   const PRESERVE_EMPTY_TAGS = new Set([
@@ -30,8 +28,8 @@ const parse = () => {
     for (const a of src.attributes) {
       if (
         ALLOWED_ATTR.has(a.name) ||
-        a.name.startsWith('aria-') ||
-        a.name.startsWith('parser-')
+        (a.name.startsWith('aria-') && a.name === 'aria-label') ||
+        (a.name.startsWith('parser-') && (a.name === 'parser-clickable' || a.name === 'parser-semantic-id'))
       ) {
         dst.setAttribute(a.name, a.value);
       }
@@ -105,11 +103,48 @@ const parse = () => {
     parent.innerHTML = child.innerHTML;
   };
 
+  const unwrapUselessSpans = (el) => {
+    // Recursively unwrap span tags that don't have parser-semantic-id
+    // This reduces HTML size significantly without losing functionality
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT);
+    const spansToUnwrap = [];
+    let node = walker.currentNode;
+
+    while (node) {
+      if (node.tagName.toLowerCase() === 'span' && !node.hasAttribute('parser-semantic-id')) {
+        spansToUnwrap.push(node);
+      }
+      node = walker.nextNode();
+    }
+
+    // Unwrap in reverse order to avoid node reference issues
+    for (let i = spansToUnwrap.length - 1; i >= 0; i--) {
+      const span = spansToUnwrap[i];
+      const parent = span.parentNode;
+      if (parent) {
+        while (span.firstChild) {
+          parent.insertBefore(span.firstChild, span);
+        }
+        parent.removeChild(span);
+      }
+    }
+
+    return el;
+  };
+
   const flatten = (el) => {
     while (el.children.length === 1) {
       const child = el.children[0];
       const p = el.tagName.toLowerCase();
       const c = child.tagName.toLowerCase();
+
+      // Keep only one child if tags are the same (e.g., span > span, div > div)
+      if (p === c && p !== 'body' && p !== 'html' && p !== 'head' && p !== 'title') {
+        pullUpChild(el, child);
+        continue;
+      }
+
+      // Original logic for div handling
       if (p !== 'div' && c !== 'div') break;
       el = (p === 'div' && c !== 'div')
         ? replaceElement(el, child.tagName, child)
@@ -151,12 +186,6 @@ const parse = () => {
     copyAllowed(original, clone);
 
     const computedStyle = window.getComputedStyle(original);
-    if (computedStyle.pointerEvents !== 'auto') {
-      clone.setAttribute('parser-pointer-events', computedStyle.pointerEvents);
-    }
-    if (document.activeElement === original) {
-      clone.setAttribute('parser-is-focused', 'true');
-    }
 
     const isDisabled = original.disabled ||
       original.hasAttribute('disabled') ||
@@ -203,16 +232,7 @@ const parse = () => {
       if (!inputIsDisabled && thisName) {
         clone.setAttribute('parser-semantic-id', thisName);
         clone.setAttribute('value', original.value || '');
-        clone.setAttribute('parser-input-disabled', 'false');
-        clone.setAttribute('parser-can-edit', !original.readOnly ? 'true' : 'false');
         original.setAttribute('parser-semantic-id', thisName);
-      }
-      if (!inputIsDisabled && thisName && t === 'number') {
-        clone.setAttribute('parser-numeric-value', original.valueAsNumber || '');
-      }
-      if (!inputIsDisabled && thisName && original.selectionStart !== undefined) {
-        clone.setAttribute('parser-selection-start', original.selectionStart);
-        clone.setAttribute('parser-selection-end', original.selectionEnd);
       }
     }
 
@@ -224,17 +244,11 @@ const parse = () => {
           thisName = uniqueName(parentName ? `${parentName}.${base}` : base);
         }
         clone.setAttribute('parser-semantic-id', thisName);
-        clone.setAttribute('parser-value', original.value);
-        clone.setAttribute('parser-selected-index', original.selectedIndex);
-        clone.setAttribute('parser-has-multiple', original.multiple ? 'true' : 'false');
-        const selectedOptions = Array.from(original.selectedOptions).map(opt => opt.value).join(',');
-        clone.setAttribute('parser-selected-values', selectedOptions);
         original.setAttribute('parser-semantic-id', thisName);
         for (const opt of original.querySelectorAll('option')) {
           const o = document.createElement('option');
           o.textContent = opt.textContent.trim();
           o.setAttribute('value', opt.value);
-          o.setAttribute('parser-selected', opt.selected ? 'true' : 'false');
           const optName = uniqueName(`${thisName}.${slug(opt.textContent)}`);
           o.setAttribute('parser-semantic-id', optName);
           opt.setAttribute('parser-semantic-id', optName);
@@ -268,10 +282,14 @@ const parse = () => {
       }
     }
 
+    // Unwrap useless spans only at the top level (avoid calling during recursion)
+    // This will be called once on the root element
     return clone;
   }
 
-  const result = automaticStripElement(document.documentElement);
+  let result = automaticStripElement(document.documentElement);
+  // Unwrap all span tags without semantic-id to reduce HTML size
+  result = unwrapUselessSpans(result);
   return {
     html: result.outerHTML,
     clickable_elements: Array.from(result.querySelectorAll('[parser-clickable="true"]'))

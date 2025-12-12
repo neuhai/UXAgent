@@ -8,6 +8,7 @@ from typing import Optional, Union
 from . import context, gpt
 from .gpt import async_chat, load_prompt
 from .memory import Action, Memory, MemoryPiece, Observation, Plan, Reflection, Thought
+from ..main.cost_calculator import calculate_cost
 
 PERCEIVE_PROMPT = load_prompt("perceive")
 REFLECT_PROMPT = load_prompt("reflect")
@@ -27,11 +28,18 @@ class LogApiCall:
         self.retrieve_result = []
         self.request = []
         self.response = []
+        self.usage = None  # Token usage information
+        self.cost = 0.0    # Cost of this API call
+        self.model = None  # Model used for this call
         self.start_time = time.time()
         context.api_call_manager.set(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
         context.api_call_manager.set(None)
+        # Calculate cost if usage information is available
+        if self.usage and self.model:
+            self.cost = calculate_cost(self.model, self.usage)
+
         with open(
             context.run_path.get()
             / "api_trace"
@@ -45,6 +53,9 @@ class LogApiCall:
                     "method_name": self.method_name,
                     "retrieve_result": self.retrieve_result,
                     "time": time.time() - self.start_time,
+                    "usage": self.usage,
+                    "cost": self.cost,
+                    "model": self.model,
                 },
                 f,
             )
@@ -318,8 +329,8 @@ class Agent:
             memories = self.format_memories(memories)
             assert self.current_plan is not None
             clickables = [e for e in env["clickable_elements"] if e is not None]
-            inputs = [e for e in env["clickable_elements"] if e is not None]
-            selects = [e for e in env["clickable_elements"] if e is not None]
+            inputs = [e["id"] for e in env.get("input_elements", []) if e is not None]
+            selects = [e["id"] for e in env.get("select_elements", []) if e is not None]
             action = await async_chat(
                 [
                     {"role": "system", "content": ACTION_PROMPT},
