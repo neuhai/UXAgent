@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, cast
@@ -22,9 +23,26 @@ from litellm.router import Router
 
 from . import context
 
-provider = "openai"  # "openai" or "aws" or "anthropic"
+load_dotenv()  # load API keys and local LLM settings from .env
+
+provider = "openai"  # "openai" or "aws" or "anthropic" or "ollama" or "vllm"
 
 prompt_dir = Path(__file__).parent.absolute() / "shop_prompts"
+
+# Local LLM settings (used when provider is "ollama" or "vllm").
+# Override via environment variables or a .env file.
+OLLAMA_API_BASE = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.1")
+OLLAMA_SLOW_CHAT_MODEL = os.getenv("OLLAMA_SLOW_CHAT_MODEL", OLLAMA_CHAT_MODEL)
+OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+
+VLLM_API_BASE = os.getenv("VLLM_API_BASE", "http://localhost:8000/v1")
+VLLM_API_KEY = os.getenv("VLLM_API_KEY", "dummy-key")
+VLLM_CHAT_MODEL = os.getenv("VLLM_CHAT_MODEL", "Qwen/Qwen2.5-32B-Instruct")
+VLLM_SLOW_CHAT_MODEL = os.getenv("VLLM_SLOW_CHAT_MODEL", VLLM_CHAT_MODEL)
+VLLM_EMBEDDING_MODEL = os.getenv(
+    "VLLM_EMBEDDING_MODEL", "intfloat/e5-mistral-7b-instruct"
+)
 
 chat_router = Router(
     model_list=[
@@ -77,6 +95,36 @@ chat_router = Router(
                 },
             },
         },
+        {
+            "model_name": "ollama",
+            "litellm_params": {
+                "model": f"ollama_chat/{OLLAMA_CHAT_MODEL}",
+                "api_base": OLLAMA_API_BASE,
+            },
+        },
+        {
+            "model_name": "ollama_thinking",
+            "litellm_params": {
+                "model": f"ollama_chat/{OLLAMA_CHAT_MODEL}",
+                "api_base": OLLAMA_API_BASE,
+            },
+        },
+        {
+            "model_name": "vllm",
+            "litellm_params": {
+                "model": f"hosted_vllm/{VLLM_CHAT_MODEL}",
+                "api_base": VLLM_API_BASE,
+                "api_key": VLLM_API_KEY,
+            },
+        },
+        {
+            "model_name": "vllm_thinking",
+            "litellm_params": {
+                "model": f"hosted_vllm/{VLLM_CHAT_MODEL}",
+                "api_base": VLLM_API_BASE,
+                "api_key": VLLM_API_KEY,
+            },
+        },
     ]
 )
 
@@ -125,6 +173,36 @@ slow_chat_router = Router(
                 },
             },
         },
+        {
+            "model_name": "ollama",
+            "litellm_params": {
+                "model": f"ollama_chat/{OLLAMA_SLOW_CHAT_MODEL}",
+                "api_base": OLLAMA_API_BASE,
+            },
+        },
+        {
+            "model_name": "ollama_thinking",
+            "litellm_params": {
+                "model": f"ollama_chat/{OLLAMA_SLOW_CHAT_MODEL}",
+                "api_base": OLLAMA_API_BASE,
+            },
+        },
+        {
+            "model_name": "vllm",
+            "litellm_params": {
+                "model": f"hosted_vllm/{VLLM_SLOW_CHAT_MODEL}",
+                "api_base": VLLM_API_BASE,
+                "api_key": VLLM_API_KEY,
+            },
+        },
+        {
+            "model_name": "vllm_thinking",
+            "litellm_params": {
+                "model": f"hosted_vllm/{VLLM_SLOW_CHAT_MODEL}",
+                "api_base": VLLM_API_BASE,
+                "api_key": VLLM_API_KEY,
+            },
+        },
     ]
 )
 
@@ -142,11 +220,25 @@ embed_router = Router(
                 "truncate": "END",
             },
         },
+        {
+            "model_name": "ollama",
+            "litellm_params": {
+                "model": f"ollama/{OLLAMA_EMBEDDING_MODEL}",
+                "api_base": OLLAMA_API_BASE,
+            },
+        },
+        {
+            "model_name": "vllm",
+            "litellm_params": {
+                "model": f"hosted_vllm/{VLLM_EMBEDDING_MODEL}",
+                "api_base": VLLM_API_BASE,
+                "api_key": VLLM_API_KEY,
+            },
+        },
     ]
 )
 
 
-load_dotenv()  # load anthropic api key from .env
 anthropic_client = anthropic.Anthropic()
 anthropic_model = "claude-sonnet-4-20250514"
 
@@ -250,8 +342,13 @@ async def async_chat(
         router_model = provider + "_thinking"
     else:
         router_model = provider
-    if json_mode and provider == "openai":
+    if json_mode and provider in ("openai", "ollama", "vllm"):
         call_kwargs["response_format"] = {"type": "json_object"}
+    # Cap max_tokens for backends with smaller context windows (e.g. local
+    # models served by vLLM, which reject requests exceeding the model limit).
+    max_tokens_cap = os.getenv("LLM_MAX_TOKENS")
+    if max_tokens_cap:
+        max_tokens = min(max_tokens, int(max_tokens_cap))
     response = await router.acompletion(
         model=router_model,
         messages=messages,
@@ -312,7 +409,7 @@ def chat(
             if isinstance(enable_thinking, int)
             else 1024,
         }
-    if json_mode and provider == "openai":
+    if json_mode and provider in ("openai", "ollama", "vllm"):
         call_kwargs["response_format"] = {"type": "json_object"}
 
     try:
@@ -333,11 +430,15 @@ async def embed_text(texts: list[str]) -> list[list[float]]:
     """
     Embed a list of texts using the provider configured in /src/simulated_web_agent/agent/gpt.py
 
+    Set the EMBEDDING_PROVIDER environment variable to embed with a different
+    provider than the chat provider (e.g. chat on vLLM, embeddings on Ollama).
+
     Returns:
         List of list[float] representing each of the embedded texts
     """
     try:
-        response = await embed_router.aembedding(model=provider, input=texts)
+        embed_provider = os.getenv("EMBEDDING_PROVIDER") or provider
+        response = await embed_router.aembedding(model=embed_provider, input=texts)
         return [e["embedding"] for e in response.data]
     except Exception as e:
         print(texts)

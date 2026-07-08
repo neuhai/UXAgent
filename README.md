@@ -78,6 +78,48 @@ https://github.com/user-attachments/assets/8f4b352b-1c36-4b16-9d83-b39046357c40
 
 ---
 
+## Using local models (Ollama / vLLM)
+
+UXAgent can run fully locally without any cloud API key, using [Ollama](https://ollama.com/) or a [vLLM](https://docs.vllm.ai/) OpenAI-compatible server. Select the provider with `llm_provider` in `conf/base.yaml` (or `llm_provider=ollama` on the command line) and configure models via environment variables.
+
+### Ollama
+
+```bash
+ollama pull llama3.1            # chat model
+ollama pull nomic-embed-text    # embedding model (required for agent memory)
+
+export OLLAMA_API_BASE=http://localhost:11434   # default
+export OLLAMA_CHAT_MODEL=llama3.1               # fast model ("small")
+export OLLAMA_SLOW_CHAT_MODEL=llama3.1          # deep-reasoning model
+export OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
+uv run -m src.simulated_web_agent.main --intent "..." --start-url "..." llm_provider=ollama
+```
+
+> [!IMPORTANT]
+> The agent feeds the full simplified web page into each prompt, so raise Ollama's
+> context window (default is 4096 tokens), e.g. `export OLLAMA_CONTEXT_LENGTH=32768`
+> before starting `ollama serve`, or bake `num_ctx` into a Modelfile.
+
+### vLLM
+
+```bash
+export VLLM_API_BASE=http://localhost:8000/v1
+export VLLM_API_KEY=dummy-key                        # only if your server requires one
+export VLLM_CHAT_MODEL=Qwen/Qwen2.5-32B-Instruct     # must match the served model name
+export VLLM_SLOW_CHAT_MODEL=Qwen/Qwen2.5-32B-Instruct
+export LLM_MAX_TOKENS=8192            # cap output tokens to fit the model context
+export EMBEDDING_PROVIDER=ollama      # vLLM usually serves one model; use Ollama for embeddings
+
+uv run -m src.simulated_web_agent.main --intent "..." --start-url "..." llm_provider=vllm
+```
+
+If your vLLM server also serves an embedding model, set `VLLM_EMBEDDING_MODEL` instead of `EMBEDDING_PROVIDER`.
+
+**Notes on model choice:** every agent step requires reading a long simplified-HTML page and emitting structured JSON. Small models (< 14B) often produce invalid JSON and trigger repeated retries; instruction-tuned models of 32B or larger are recommended for usable simulations.
+
+---
+
 ## Quick Start
 
 ### Running a single agent from the command line

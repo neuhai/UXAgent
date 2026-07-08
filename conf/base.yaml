@@ -92,7 +92,9 @@ survey:
 # LLM CONFIGURATION
 # ============================================================================
 # Large Language Model provider settings
-llm_provider: "aws"     # Provider: "openai" or "aws" or "anthropic"
+# Cloud providers: "openai", "aws", "anthropic"
+# Local providers:  "ollama", "vllm" (see "Using local models" in README.md)
+llm_provider: "aws"
 
 # ============================================================================
 # GENERAL SETTINGS
